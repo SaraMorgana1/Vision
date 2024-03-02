@@ -1,4 +1,5 @@
 #juntar os dois códigos (test and test2)
+#código de teste. Não funciona
 
 import mediapipe as mp
 import cv2
