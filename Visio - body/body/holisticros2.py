@@ -23,7 +23,7 @@ class detectorhros:
 
         pipeline.start(config)
 
-        with self.mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, max_num_faces=4) as holistic:
+        with self.mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
             # Inicializar o módulo Holistic do MediaPipe
             mp_holistic = mp.solutions.holistic
             mp_drawing = mp.solutions.drawing_utils
