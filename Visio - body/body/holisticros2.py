@@ -23,50 +23,72 @@ class detectorhros:
 
         pipeline.start(config)
 
-        with self.mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
-            while True:
-                frames = pipeline.wait_for_frames()
-                color_frame = frames.get_color_frame()
-                if not color_frame:
-                    continue
+        with self.mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5, max_num_faces=4) as holistic:
+            # Inicializar o módulo Holistic do MediaPipe
+            mp_holistic = mp.solutions.holistic
+            mp_drawing = mp.solutions.drawing_utils
 
-                frame = np.asanyarray(color_frame.get_data())
+            # Inicializar a captura de vídeo
+            cap = cv2.VideoCapture(0)
+            while cap.isOpened():
+                ret, frame = cap.read()
+                
+                # Flip frame horizontalmente para corresponder à visualização do espelho
+                frame = cv2.flip(frame, 1)
+                
+                # Converta a cor de BGR para RGB
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # Faça a detecção holistic
+                results = holistic.process(rgb_frame)
 
-                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                if results.pose_landmarks:
+                    # Extraia as coordenadas dos pontos-chave relevantes
+                    right_shoulder = (int(results.pose_landmarks.landmark[mp_holistic.PoseLandmark.RIGHT_SHOULDER].x * frame.shape[1]), 
+                                    int(results.pose_landmarks.landmark[mp_holistic.PoseLandmark.RIGHT_SHOULDER].y * frame.shape[0]))
+                    left_shoulder = (int(results.pose_landmarks.landmark[mp_holistic.PoseLandmark.LEFT_SHOULDER].x * frame.shape[1]), 
+                                    int(results.pose_landmarks.landmark[mp_holistic.PoseLandmark.LEFT_SHOULDER].y * frame.shape[0]))
+                    waist = (int(results.pose_landmarks.landmark[mp_holistic.PoseLandmark.RIGHT_HIP].x * frame.shape[1]), 
+                            int(results.pose_landmarks.landmark[mp_holistic.PoseLandmark.RIGHT_HIP].y * frame.shape[0]))
+                    
+                    # Calcular a posição média dos ombros e da cintura para estimar o peito
+                    chest_x = (right_shoulder[0] + left_shoulder[0] + waist[0]) // 3
+                    chest_y = (right_shoulder[1] + left_shoulder[1] + waist[1]) // 3
 
-                results = holistic.process(image)
+                    if 0 <= chest_x < frame.shape[1] and 0 <= chest_y < frame.shape[0]:
+                        # Obter a cor do pixel na posição do círculo
+                        bgr_color = frame[chest_y, chest_x]
+                        rgb_color=[0,0,0]
+                        j=3
+                        bgr2=[0,0,0]
+                        
+                        for i in range(3):
+                            # Converter de BGR para RGB
+                            j=j-1
+                            rgb_color[i]= int(bgr_color[j])
 
-                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                        for k in range(3):
+                        
+                            bgr2[k]= int(bgr_color[k])
+                            
+                        
+                        cv2.circle(frame, (chest_x, chest_y), 50, (bgr2[0],bgr2[1],bgr2[2]), cv2.FILLED)
+                    else:
+                        cv2.circle(frame, (chest_x, chest_y), 50, (0,0,0), cv2.FILLED)
+                    
 
-                f1 = mp.solutions.drawing_utils.DrawingSpec(color=(80, 110, 10), thickness=1, circle_radius=1)
-                f2 = mp.solutions.drawing_utils.DrawingSpec(color=(80, 256, 121), thickness=1, circle_radius=1)
+                # Desenhar a detecção holistic no frame
+                mp_drawing.draw_landmarks(frame, results.face_landmarks, mp_holistic.FACEMESH_TESSELATION, landmark_drawing_spec=None)
+                mp_drawing.draw_landmarks(frame, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=None)
+                mp_drawing.draw_landmarks(frame, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=None)
+                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
 
-                hr1 = mp.solutions.drawing_utils.DrawingSpec(color=(80, 22, 10), thickness=2, circle_radius=4)
-                hr2 = mp.solutions.drawing_utils.DrawingSpec(color=(80, 44, 121), thickness=2, circle_radius=2)
-
-                hl1 = mp.solutions.drawing_utils.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4)
-                hl2 = mp.solutions.drawing_utils.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
-
-                p1 = mp.solutions.drawing_utils.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=4)
-                p2 = mp.solutions.drawing_utils.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
-
-                self.mp_drawing.draw_landmarks(image, results.face_landmarks, mp.solutions.holistic.FACEMESH_TESSELATION,
-                                           f1, f2)
-
-                self.mp_drawing.draw_landmarks(image, results.right_hand_landmarks,
-                                           mp.solutions.holistic.HAND_CONNECTIONS, hr1, hr2)
-
-                self.mp_drawing.draw_landmarks(image, results.left_hand_landmarks,
-                                           mp.solutions.holistic.HAND_CONNECTIONS, hl1, hl2)
-
-                self.mp_drawing.draw_landmarks(image, results.pose_landmarks,
-                                           mp.solutions.holistic.POSE_CONNECTIONS, p1, p2)
-
-                cv2.imshow("holistic vision", image)
-                cv2.waitKey(1)
+                # Mostrar o frame resultante
+                cv2.imshow('MediaPipe Holistic Detection', frame)
+                cv2.waitKey(1) 
 
                 try:
-                    self.image_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
+                    self.image_pub.publish(self.bridge.cv2_to_imgmsg(frame, "bgr8"))
                 except CvBridgeError as e:
                     print(e)
 
